@@ -11,7 +11,7 @@ keyword arguments: `analytics`, `assets`, `canonical`, `disable_git`, `edit_link
 `prettyurls`, `collapselevel`, `sidebar_sitename`, `highlights`, `mathengine` and `footer`.
 
 **`sitename`** is the site's title displayed in the title bar and at the top of the
-*navigation menu. It is also written into the inventory (see below).
+navigation menu. It is also written into the inventory (see below).
 This argument is mandatory for [`HTMLWriter`](@ref).
 
 **`pages`** defines the hierarchy of the navigation menu.
@@ -88,11 +88,52 @@ const THEMES = ["documenter-light", "documenter-dark", "catppuccin-latte", "catp
 "The root directory of the HTML assets."
 const ASSETS = normpath(joinpath(@__DIR__, "..", "..", "assets", "html"))
 "The version of minisearch to use."
-const MINISEARCH_VERSION = "6.1.0"
+const MINISEARCH_VERSION = "6.2.0"
 "The directory where all the Sass/SCSS files needed for theme building are."
 const ASSETS_SASS = joinpath(ASSETS, "scss")
 "Directory for the compiled CSS files of the themes."
 const ASSETS_THEMES = joinpath(ASSETS, "themes")
+
+struct TopMenuSection
+    title::String
+    navtree::Vector{Documenter.NavNode}
+    navlist::Vector{Documenter.NavNode}
+    first_page::Union{String, Nothing}
+end
+
+TopMenuSection(title::String) = TopMenuSection(title, Documenter.NavNode[], Documenter.NavNode[], nothing)
+
+function _collect_navlist!(list, node)
+    node.page !== nothing && push!(list, node)
+    for child in node.children
+        _collect_navlist!(list, child)
+    end
+    return
+end
+
+function build_top_menu_sections(doc::Documenter.Document)
+    sections = TopMenuSection[]
+    seen_pages = Set{String}()
+    for top_node in doc.internal.navtree
+        title = something(top_node.title_override, "")
+        # For leaf pages (no children), include the node itself in the
+        # navtree so the sidebar shows it as a single entry with its
+        # in-page headings.
+        navtree = isempty(top_node.children) ? [top_node] : top_node.children
+        navlist = Documenter.NavNode[]
+        _collect_navlist!(navlist, top_node)
+        for nn in navlist
+            if nn.page in seen_pages
+                @warn "Page '$(nn.page)' appears in multiple top_menu sections. " *
+                    "Each page should belong to only one section for proper navigation."
+            end
+            push!(seen_pages, nn.page)
+        end
+        first_page = isempty(navlist) ? nothing : navlist[1].page
+        push!(sections, TopMenuSection(title, navtree, navlist, first_page))
+    end
+    return sections
+end
 
 abstract type HTMLHeadContent end
 
@@ -133,10 +174,10 @@ HTTP or HTTPS URL.
 It accepts the following keyword arguments:
 
 **`class`** can be used to override the asset class, which determines how exactly the asset
-gets included in the HTML page. This is necessary if the class can not be determined
+gets included in the HTML page. This is necessary if the class cannot be determined
 automatically (default).
 
-Should be one of: `:js`, `:css` or `:ico`. They become a `<script>`,
+Should be one of: `:js`, `:css` or `:ico`. They become `<script>`,
 `<link rel="stylesheet" type="text/css">` and `<link rel="icon" type="image/x-icon">`
 elements in `<head>`, respectively.
 
@@ -147,16 +188,18 @@ when it is necessary to override the asset class of a local asset.
 # Usage
 
 ```julia
-Documenter.HTML(assets = [
-    # Standard local asset
-    "assets/extra_styles.css",
-    # Standard remote asset (extension used to determine that class = :js)
-    asset("https://example.com/jslibrary.js"),
-    # Setting asset class manually, since it can't be determined manually
-    asset("https://example.com/fonts", class = :css),
-    # Same as above, but for a local asset
-    asset("asset/foo.script", class=:js, islocal=true),
-])
+Documenter.HTML(
+    assets = [
+        # Standard local asset
+        "assets/extra_styles.css",
+        # Standard remote asset (extension used to determine that class = :js)
+        asset("https://example.com/jslibrary.js"),
+        # Setting asset class manually, since it can't be determined automatically
+        asset("https://example.com/fonts", class = :css),
+        # Same as above, but for a local asset
+        asset("asset/foo.script", class = :js, islocal = true),
+    ]
+)
 ```
 """
 function asset(uri; class = nothing, islocal = false, attributes = Dict{Symbol, String}())
@@ -337,7 +380,7 @@ the links to the remote repository.
 
 **`edit_link`** can be used to specify which branch, tag or commit (when passed a `String`)
 in the remote repository the edit buttons point to. If a special `Symbol` value `:commit`
-is passed, the current commit will be used instead. If set to `nothing`, the link edit link
+is passed, the current commit will be used instead. If set to `nothing`, the edit link
 will be hidden altogether. By default, Documenter tries to determine it automatically by
 looking at the `origin` remote, and falls back to `"master"` if that fails.
 
@@ -355,7 +398,7 @@ Default is `nothing`, in which case no canonical link is set.
 **`assets`** can be used to include additional assets (JS, CSS, ICO etc. files). See below
 for more information.
 
-**`analytics`** can be used specify the Google Analytics tracking ID.
+**`analytics`** can be used to specify the Google Analytics tracking ID.
 
 **`collapselevel`** controls the navigation level visible in the sidebar. Defaults to `2`.
 To show fewer levels by default, set `collapselevel = 1`.
@@ -404,7 +447,7 @@ Setting it to `nothing` will disable writing to files, and setting to `0` means 
 will be written to files. Defaults to `8 KiB`.
 
 **`size_threshold`** sets the maximum allowed HTML file size (in bytes) that Documenter is allowed to
-generate for a page. If the generated HTML file is larged than this, Documenter will throw an error and
+generate for a page. If the generated HTML file is larger than this, Documenter will throw an error and
 the build will fail. If set to `nothing`, the file sizes are not checked. Defaults to `200 KiB` (but
 increases of this default value will be considered to be non-breaking).
 
@@ -420,20 +463,20 @@ over setting a high general limit, or disabling the size checking altogether.
 !!! note "Purpose of HTML size thresholds"
 
     The size threshold, with a reasonable default, exists so that users would not deploy huge pages
-    accidentally (which among other this will result in bad UX for the readers and negatively impacts
+    accidentally (which among other things will result in bad UX for the readers and negatively impacts
     SEO). It is relatively easy to have e.g. an `@example` produce a lot of output.
 
 ## Experimental options
 
-**`prerender`** a boolean (`true` or `false` (default)) for enabling prerendering/build
+**`prerender`** is a boolean (`true` or `false` (default)) for enabling prerendering/build
 time application of syntax highlighting of code blocks. Requires a `node` (NodeJS)
 executable to be available in `PATH` or to be passed as the `node` keyword.
 
-**`node`** path to a `node` (NodeJS) executable used for prerendering.
+**`node`** is the path to a `node` (NodeJS) executable used for prerendering.
 
-**`highlightjs`** file path to custom highglight.js library to be used with prerendering.
+**`highlightjs`** is the file path to a custom highlight.js library to be used with prerendering.
 
-**`inventory_version`** a version string to write to the header of the
+**`inventory_version`** is a version string to write to the header of the
 `objects.inv` inventory file. This should be a valid version number without a `v` prefix.
 Defaults to the `version` defined in the `Project.toml` file in the parent folder of the
 documentation root. Setting this to an empty string leaves the `version` in the inventory
@@ -445,7 +488,7 @@ unspecified until [`deploydocs`](@ref `Documenter.deploydocs`) runs and automati
 Documenter copies all files under the source directory (e.g. `/docs/src/`) over
 to the compiled site. It also copies a set of default assets from `/assets/html/`
 to the site's `assets/` directory, unless the user already had a file with the
-same name, in which case the user's files overrides the Documenter's file.
+same name, in which case the user's file overrides Documenter's file.
 This could, in principle, be used for customizing the site's style and scripting.
 
 The HTML output also links certain custom assets to the generated HTML documents,
@@ -461,7 +504,7 @@ themes.
 
 Similarly, for the **preview image**, Documenter checks for the existence of
 `assets/preview.{png,webp,gif,jpg,jpeg}` in order. Assuming that `canonical` has
-been set, the canonical URL for the image gets constructed, , and a set of
+been set, the canonical URL for the image gets constructed, and a set of
 HTML `<meta>` tags are generated for the image, ensuring that the image shows
 up in link previews. The preview image will not be shown if `canonical` is not set.
 
@@ -471,11 +514,40 @@ in the order in which they are given. The type of the asset (i.e. whether it is 
 included with a `<script>` or a `<link>` tag) is determined by the file's extension --
 either `.js`, `.ico`[^1], or `.css` (unless overridden with [`asset`](@ref)).
 
-Simple strings are assumed to be local assets and that each correspond to a file relative to
+Simple strings are assumed to be local assets, each corresponding to a file relative to
 the documentation source directory (conventionally `src/`). Non-local assets, identified by
 their absolute URLs, can be included with the [`asset`](@ref) function.
 
 [^1]: Adding an ICO asset is primarily useful for setting a custom `favicon`.
+
+**`top_menu`** (Boolean, default: `false`) enables building a top-level navigation bar
+above the sidebar navigation. When set to `true`, the first layer of the `pages` argument
+to [`makedocs`](@ref) is used as the top menu (each entry becomes a section with its own
+sidebar navigation).
+
+```julia
+makedocs(
+    format = HTML(top_menu = true),
+    pages = [
+        "Getting Started" => [
+            "Home" => "index.md",
+            "Installation" => "install.md",
+        ],
+        "User Guide" => [
+            "Guide" => "guide/index.md",
+        ],
+    ],
+)
+```
+
+Each entry in the first layer of `pages` must be a `"Section Title" => pages_array` pair.
+The first page in each section will be used as the link destination when clicking the
+section title in the top bar.
+
+!!! note "Landing page and unique pages"
+    The section containing `index.md` will be displayed first when the documentation is opened,
+    since `index.md` becomes the landing page. Additionally, each page should appear in only
+    one section — having the same page in multiple sections will cause navigation issues.
 """
 struct HTML <: Documenter.Writer
     prettyurls::Bool
@@ -503,6 +575,7 @@ struct HTML <: Documenter.Writer
     example_size_threshold::Int
     search_size_threshold_warn::Int
     inventory_version::Union{String, Nothing}
+    top_menu::Bool
 
     function HTML(;
             prettyurls::Bool = true,
@@ -533,6 +606,7 @@ struct HTML <: Documenter.Writer
             example_size_threshold::Union{Integer, Nothing} = 8 * 2^10, # 8 KiB
             search_size_threshold_warn::Union{Integer, Nothing} = 500 * 2^10, # 500 KiB
             inventory_version = nothing,
+            top_menu::Bool = false,
 
             # deprecated keywords
             edit_branch::Union{String, Nothing, Default} = Default(nothing),
@@ -598,7 +672,8 @@ struct HTML <: Documenter.Writer
             ansicolor, lang, warn_outdated, prerender, node, highlightjs,
             size_threshold, size_threshold_warn, size_threshold_ignore, example_size_threshold,
             search_size_threshold_warn,
-            (isnothing(inventory_version) ? nothing : string(inventory_version))
+            (isnothing(inventory_version) ? nothing : string(inventory_version)),
+            top_menu
         )
     end
 end
@@ -684,11 +759,13 @@ mutable struct HTMLContext
     search_index_js::String
     search_navnode::Documenter.NavNode
     atexample_warnings::Vector{AtExampleFallbackWarning}
+    top_menu_sections::Vector{TopMenuSection}
 
     HTMLContext(doc, settings = nothing) = new(
         doc, settings, [], "", "", "", [], "",
         Documenter.NavNode("search", "Search", nothing),
         AtExampleFallbackWarning[],
+        TopMenuSection[],
     )
 end
 
@@ -820,12 +897,26 @@ Returns a page (as a [`Documenter.Page`](@ref) object) using the [`HTMLContext`]
 getpage(ctx::HTMLContext, path) = ctx.doc.blueprint.pages[path]
 getpage(ctx::HTMLContext, navnode::Documenter.NavNode) = getpage(ctx, navnode.page)
 
+function _find_first_index_page(pages)
+    for entry in pages
+        page = entry isa Pair ? entry.second : entry
+        if page isa AbstractString
+            endswith(normpath(page), "index.md") && return page
+        elseif page isa Vector
+            result = _find_first_index_page(page)
+            result !== nothing && return result
+        end
+    end
+    return nothing
+end
+
 function render(doc::Documenter.Document, settings::HTML = HTML())
     @info "HTMLWriter: rendering HTML pages."
     !isempty(doc.user.sitename) || error("HTML output requires `sitename`.")
     if isempty(doc.blueprint.pages)
         error("Aborting HTML build: no pages under src/")
-    elseif !haskey(doc.blueprint.pages, "index.md")
+    elseif !haskey(doc.blueprint.pages, "index.md") &&
+            !(settings.top_menu && _find_first_index_page(doc.user.pages) !== nothing)
         @warn "Can't generate landing page (index.html): src/index.md missing" keys(doc.blueprint.pages)
     end
 
@@ -841,6 +932,9 @@ function render(doc::Documenter.Document, settings::HTML = HTML())
     end
 
     ctx = HTMLContext(doc, settings)
+    if settings.top_menu
+        ctx.top_menu_sections = build_top_menu_sections(doc)
+    end
     ctx.search_index_js = "search_index.js"
     ctx.themeswap_js = copy_asset("themeswap.js", doc)
     ctx.warner_js = copy_asset("warner.js", doc)
@@ -939,6 +1033,32 @@ function render(doc::Documenter.Document, settings::HTML = HTML())
 
     write_inventory(doc, ctx)
 
+    # When top_menu is enabled and there is no root index.md, generate a redirect
+    # index.html at the build root pointing to the first index.md in the pages tree.
+    if settings.top_menu && !haskey(doc.blueprint.pages, "index.md")
+        first_index = _find_first_index_page(doc.user.pages)
+        if first_index !== nothing
+            first_url = pretty_url(ctx, get_url(ctx, normpath(first_index)))
+            redirect_path = joinpath(doc.user.build, "index.html")
+            open(redirect_path, "w") do io
+                write(
+                    io, """<!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="utf-8">
+                        <meta http-equiv="refresh" content="0; url=$(first_url)">
+                        <title>Redirecting...</title>
+                    </head>
+                    <body>
+                        <p><a href="$(first_url)">Redirecting...</a></p>
+                    </body>
+                    </html>
+                    """
+                )
+            end
+        end
+    end
+
     return generate_siteinfo_json(doc.user.build)
 end
 
@@ -952,7 +1072,7 @@ function Base.showerror(io::IO, ::HTMLSizeThresholdError)
 end
 
 """
-Copies an asset from Documenters `assets/html/` directory to `doc.user.build`.
+Copies an asset from Documenter's `assets/html/` directory to `doc.user.build`.
 Returns the path of the copied asset relative to `.build`.
 """
 function copy_asset(file, doc)
@@ -995,7 +1115,7 @@ function render_page(ctx, navnode)
     article = render_article(ctx, navnode)
     footer = render_footer(ctx, navnode)
     extras = render_extras(ctx, navnode)
-    htmldoc = render_html(ctx, head, sidebar, navbar, article, footer, extras)
+    htmldoc = render_html(ctx, navnode, head, sidebar, navbar, article, footer, extras)
     return write_html(ctx, navnode, htmldoc)
 end
 
@@ -1003,20 +1123,136 @@ end
 # ------------------------------------------------------------------------------
 
 """
+Find the first descendant NavNode that has an associated page, or the node itself
+if it has a page. Returns `nothing` if no such node exists in the subtree.
+"""
+function first_page_navnode(nn::Documenter.NavNode)
+    nn.page !== nothing && return nn
+    for child in nn.children
+        result = first_page_navnode(child)
+        result !== nothing && return result
+    end
+    return nothing
+end
+
+"""
+Renders the top navigation bar when `top_menu` is configured.
+Returns `nothing` if `top_menu` is not being used.
+"""
+function render_top_menu(ctx, navnode)
+    sections = ctx.top_menu_sections
+    isempty(sections) && return nothing
+
+    @tags nav div a ul li span
+
+    # Find which section the current page belongs to
+    current_page = navnode.page
+    current_section_idx = 0
+    for (idx, section) in enumerate(sections)
+        for nn in section.navlist
+            if nn.page == current_page
+                current_section_idx = idx
+                break
+            end
+        end
+        current_section_idx > 0 && break
+    end
+
+    # Build the menu items
+    items = map(enumerate(sections)) do (idx, section)
+        is_active = idx == current_section_idx
+        # Find the first navnode within this specific section
+        first_navnode = isempty(section.navlist) ? nothing : section.navlist[1]
+        href = if first_navnode !== nothing
+            navhref(ctx, first_navnode, navnode)
+        else
+            "#"
+        end
+
+        # Build dropdown items from the section's top-level navtree entries
+        dropdown_items = DOM.Node[]
+        for nn in section.navtree
+            target_nn = first_page_navnode(nn)
+            target_nn === nothing && continue
+            item_href = navhref(ctx, target_nn, navnode)
+            dctx_nn = DCtx(ctx, nn, true)
+            item_title = domify(dctx_nn, pagetitle(dctx_nn))
+            push!(dropdown_items, li(a[".docs-top-dropdown-item", :href => item_href](item_title)))
+        end
+
+        li_class = is_active ? ".docs-top-dropdown.is-active" : ".docs-top-dropdown"
+        li[li_class](
+            a[".docs-top-menu-link", :href => href](
+                section.title,
+                span[".docs-top-dropdown-caret"]("▾"),
+            ),
+            ul[".docs-top-dropdown-menu"](dropdown_items...),
+        )
+    end
+
+    return nav[".docs-top-menu"](
+        div[".container"](
+            ul[".docs-top-menu-list"](items...)
+        )
+    )
+end
+
+"""
+Find the NavNode for a given page path.
+"""
+function find_navnode_for_page(ctx, page_path)
+    for navnode in ctx.doc.internal.navlist
+        if navnode.page == page_path
+            return navnode
+        end
+    end
+    return isempty(ctx.doc.internal.navlist) ? nothing : ctx.doc.internal.navlist[1]
+end
+
+"""
+Get the correct navtree for the current page based on top_menu sections.
+"""
+function get_section_navtree(ctx, navnode)
+    sections = ctx.top_menu_sections
+    isempty(sections) && return ctx.doc.internal.navtree
+
+    current_page = navnode.page
+    for section in sections
+        for nn in section.navlist
+            if nn.page == current_page
+                return section.navtree
+            end
+        end
+    end
+    return ctx.doc.internal.navtree
+end
+
+"""
 Renders the main `<html>` tag.
 """
-function render_html(ctx, head, sidebar, navbar, article, footer, extras)
+function render_html(ctx, navnode, head, sidebar, navbar, article, footer, extras)
     @tags html body div
+    top_menu = render_top_menu(ctx, navnode)
+    main_content = if isnothing(top_menu)
+        div["#documenter"](
+            sidebar,
+            div[".docs-main"](navbar, article, footer),
+            render_settings(),
+        )
+    else
+        div["#documenter.has-top-menu"](
+            top_menu,
+            div[".docs-content-wrapper"](
+                sidebar,
+                div[".docs-main"](navbar, article, footer),
+            ),
+            render_settings(),
+        )
+    end
     return DOM.HTMLDocument(
         html[:lang => ctx.settings.lang](
             head,
-            body(
-                div["#documenter"](
-                    sidebar,
-                    div[".docs-main"](navbar, article, footer),
-                    render_settings(),
-                ),
-            ),
+            body(main_content),
             extras...
         )
     )
@@ -1326,7 +1562,7 @@ It gets called recursively to construct the whole tree.
 It always returns a [`DOM.Node`](@ref). If there's nothing to display (e.g. the node is set
 to be invisible), it returns an empty text node (`DOM.Node("")`).
 """
-navitem(nctx) = navitem(nctx, nctx.htmlctx.doc.internal.navtree)
+navitem(nctx) = navitem(nctx, get_section_navtree(nctx.htmlctx, nctx.current))
 function navitem(nctx, nns::Vector)
     push!(nctx.idstack, 0)
     nodes = map(nns) do nn
@@ -1489,7 +1725,7 @@ function edit_link(f, ctx, navnode)
         f(view_logo, title, editpath)
         return
     end
-    # If the user has disable Git, then we can not determine edit links
+    # If the user has disabled Git, then we cannot determine edit links
     ctx.settings.disable_git && return
     # If the user has passed HTML(edit_link = nothing), then all edit links (with relative
     # paths) are disabled.
@@ -1833,6 +2069,16 @@ function domify(dctx::DCtx, node::Node, ah::Documenter.AnchoredHeader)
     )
 end
 
+function domify(dctx::DCtx, node::Node, ai::Documenter.AnchoredInline)
+    @tags span
+    id = lstrip(Documenter.anchor_fragment(ai.anchor), '#')
+    # A `<span id=...>` (rather than `<a id=...>`) so the anchored content renders exactly as
+    # it would without the anchor: it is a valid fragment/scroll target, but avoids link
+    # styling on non-link content and nesting an <a> inside the content (which may itself be a
+    # link or image).
+    return span[:id => id](domify(dctx, node.children))
+end
+
 struct ListBuilder
     es::Vector
 end
@@ -2044,7 +2290,7 @@ function relhref(from, to)
 end
 
 """
-Returns the full path corresponding to a path of a `.md` page file. The the input and output
+Returns the full path corresponding to a path of a `.md` page file. The input and output
 paths are assumed to be relative to `src/`.
 """
 function get_url(ctx, path::AbstractString)
@@ -2063,7 +2309,7 @@ end
 
 """
 Generates a unique file for the output of an at-example block if it goes over the configured
-size threshold, and returns the filename (that should be in the same directory are the
+size threshold, and returns the filename (that should be in the same directory as the
 corresponding HTML file). If the data is under the threshold, no file is created, and the
 function returns `nothing`.
 """
