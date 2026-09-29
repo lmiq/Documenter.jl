@@ -177,7 +177,6 @@ generating [`NavNode`](@ref)s and related data structures in the
 process.
 
 This implementation is the de facto specification for the `.user.pages` field.
-
 """
 function walk_navpages(visible, title, src, children, parent, doc)
     # parent can also be nothing (for top-level elements)
@@ -187,9 +186,7 @@ function walk_navpages(visible, title, src, children, parent, doc)
         src in keys(doc.blueprint.pages) || error("'$src' is not an existing page!")
     end
     nn = Documenter.NavNode(src, title, parent)
-    if src !== nothing
-        push!(doc.internal.navlist, nn)
-    end
+    (src === nothing) || push!(doc.internal.navlist, nn)
     nn.visible = parent_visible && visible
     nn.children = walk_navpages(children, nn, doc)
     return nn

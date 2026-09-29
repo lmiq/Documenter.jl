@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a `top_menu` option to `Documenter.HTML` for multi-section documentation with a top navigation bar. With `HTML(top_menu = true)`, each top-level entry of `pages` becomes a section in the top bar, with its own sidebar navigation tree and previous/next page links. ([#2904])
 * The HTML output now sets a `no-referrer` referrer policy by default, so that the CDNs serving the fonts, stylesheets and scripts are no longer told which page the reader is on. It can be changed or disabled with the `referrerpolicy` keyword of `Documenter.HTML`. ([#2391], [#2401])
 
 ### Fixed
@@ -54,7 +55,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Added `top_menu` keyword argument to `makedocs` for multi-section documentation with a top navigation bar. This enables upper-level organization above the sidebar, with each section maintaining its own sidebar navigation tree. ([#2866])
 * The version selector now also preserves the anchor (hash) when switching between documentation versions. Additionally, the outdated/dev version warning banner now also tries to keep you on the same page (and position) when linking to the latest stable release. ([#2880])
 * Added `Remotes.Forgejo` for specifying a `Remote` hosted on a Forgejo instance (such as codeberg.org). ([#2857])
 * Doctests now default to the `parser_for_module` of the module that the docstring appears in, allowing modules that set their syntax version via `Base.Experimental.@set_syntax_version` to have their doctests parsed with the correct syntax automatically. Also added support for `DocTestSyntax` metadata and per-block `syntax=` attributes to explicitly specify a syntax version. ([#2874])
@@ -2324,6 +2324,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#2880]: https://github.com/JuliaDocs/Documenter.jl/issues/2880
 [#2889]: https://github.com/JuliaDocs/Documenter.jl/issues/2889
 [#2894]: https://github.com/JuliaDocs/Documenter.jl/issues/2894
+[#2904]: https://github.com/JuliaDocs/Documenter.jl/issues/2904
 [#2905]: https://github.com/JuliaDocs/Documenter.jl/issues/2905
 [#2912]: https://github.com/JuliaDocs/Documenter.jl/issues/2912
 [#2925]: https://github.com/JuliaDocs/Documenter.jl/issues/2925
