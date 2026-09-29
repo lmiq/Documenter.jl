@@ -82,10 +82,19 @@ $documenter-topmenu-active-color: $documenter-sidebar-menu-active-color !default
     }
 
     .docs-top-dropdown-caret {
-      margin-left: 0.35em;
-      font-size: 0.75em;
+      display: inline-block;
+      font-style: normal;
+      font-variant: normal;
+      text-rendering: auto;
+      margin-left: 0.5em;
+      font-size: 0.65em;
       opacity: 0.6;
       line-height: 1;
+      &::before {
+        @include font-awesome;
+        // fa-chevron-down
+        content: "\f078";
+      }
     }
   }
 

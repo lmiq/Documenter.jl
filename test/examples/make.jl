@@ -505,15 +505,16 @@ examples_html_topmenu_doc = if "html-topmenu" in EXAMPLE_BUILDS
         sitename = "Documenter TopMenu Example",
         pages = [
             "Getting Started" => [
-                "Home" => "getting-started/index.md",
+                "Home" => "index.md",
                 "Installation" => "getting-started/install.md",
             ],
             "User Guide" => [
                 "Overview" => "guide/index.md",
                 "Advanced" => "guide/advanced.md",
             ],
+            hide("Reference" => "reference/index.md", ["reference/extra.md"]),
+            hide("Hidden Section" => "hidden.md"),
         ],
-        warnonly = true,
     )
 else
     @info "Skipping build: HTML/topmenu"
