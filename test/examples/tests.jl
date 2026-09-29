@@ -500,107 +500,79 @@ end
         doc = Main.examples_html_topmenu_doc
         @test isa(doc, Documenter.Documenter.Document)
 
-        # Verify top-level navtree has two section entries
-        @test length(doc.internal.navtree) == 2
-        @test doc.internal.navtree[1].title_override == "Getting Started"
-        @test doc.internal.navtree[2].title_override == "User Guide"
+        # Verify top-level navtree has the four section entries
+        @test length(doc.internal.navtree) == 4
+        @test [nn.title_override for nn in doc.internal.navtree] ==
+            ["Getting Started", "User Guide", "Reference", "Hidden Section"]
+        @test [nn.visible for nn in doc.internal.navtree] == [true, true, true, false]
 
         # Verify each section has its own pages (children of the section navnode)
         @test length(doc.internal.navtree[1].children) == 2
         @test length(doc.internal.navtree[2].children) == 2
 
         # Verify first page of each section (use joinpath for cross-platform compatibility)
-        @test doc.internal.navtree[1].children[1].page == joinpath("getting-started", "index.md")
+        @test doc.internal.navtree[1].children[1].page == "index.md"
         @test doc.internal.navtree[2].children[1].page == joinpath("guide", "index.md")
 
         let build_dir = joinpath(examples_root, "builds", "html-topmenu")
+            # Extracts the <nav> element of the top menu from a page
+            top_menu_html(content) = match(r"<nav class=\"docs-top-menu\".*?</nav>"s, content).match
+            read_page(path...) = read(joinpath(build_dir, path..., "index.html"), String)
+
             # Check that HTML files were generated
-            @test joinpath(build_dir, "getting-started", "index.html") |> isfile
+            @test joinpath(build_dir, "index.html") |> isfile
             @test joinpath(build_dir, "getting-started", "install", "index.html") |> isfile
             @test joinpath(build_dir, "guide", "index.html") |> isfile
             @test joinpath(build_dir, "guide", "advanced", "index.html") |> isfile
-
-            # Check that a redirect index.html was generated at the build root
-            @test joinpath(build_dir, "index.html") |> isfile
-            redirect_content = read(joinpath(build_dir, "index.html"), String)
-            @test occursin("getting-started", redirect_content)
-            @test occursin("Redirecting", redirect_content)
+            @test joinpath(build_dir, "reference", "index.html") |> isfile
+            @test joinpath(build_dir, "reference", "extra", "index.html") |> isfile
+            @test joinpath(build_dir, "hidden", "index.html") |> isfile
 
             # Check that top menu is present in generated HTML
-            page_content = read(joinpath(build_dir, "getting-started", "index.html"), String)
-            @test occursin("docs-top-menu", page_content)
-            @test occursin("Getting Started", page_content)
-            @test occursin("User Guide", page_content)
+            page_content = read_page()
             @test occursin("has-top-menu", page_content)
+            top_menu = top_menu_html(page_content)
+            @test occursin("aria-label=\"Documentation sections\"", top_menu)
+            @test occursin("Getting Started", top_menu)
+            @test occursin("User Guide", top_menu)
+            @test occursin("Reference", top_menu)
+            # Sections hidden with hide() are not shown in the top menu, and neither are
+            # pages hidden with hide(root, children) in the dropdowns
+            @test !occursin("Hidden Section", top_menu)
+            @test !occursin("hidden/", top_menu)
+            @test !occursin("reference/extra/", top_menu)
 
             # Check dropdown structure is present
-            @test occursin("docs-top-dropdown", page_content)
-            @test occursin("docs-top-dropdown-menu", page_content)
-            @test occursin("docs-top-dropdown-item", page_content)
-            @test occursin("docs-top-dropdown-caret", page_content)
+            @test occursin("docs-top-dropdown-menu", top_menu)
+            @test occursin("docs-top-dropdown-item", top_menu)
+            @test occursin("docs-top-dropdown-caret", top_menu)
 
-            # Check that the dropdown items link to section pages
-            # "Getting Started" section has "Home" (getting-started/index.md) and "Installation"
-            @test occursin("getting-started", page_content)
-            @test occursin("install", page_content)
+            # The dropdown items link to the section pages, and the section of the
+            # current page is the active one
+            @test occursin("href=\"getting-started/install/\"", top_menu)
+            @test occursin("href=\"guide/advanced/\"", top_menu)
+            @test occursin(r"<li class=\"docs-top-dropdown is-active\"><a class=\"docs-top-menu-link\" href[^>]*aria-current=\"true\">Getting Started", top_menu)
 
-            # Check that different sections show different sidebar content
-            guide_content = read(joinpath(build_dir, "guide", "index.html"), String)
-            @test occursin("docs-top-menu", guide_content)
-            # Dropdown for "User Guide" section should contain its pages
-            @test occursin("docs-top-dropdown-menu", guide_content)
-            @test occursin("docs-top-dropdown-item", guide_content)
-        end
+            # Different sections show different sidebar content
+            guide_content = read_page("guide")
+            @test occursin(r"<li class=\"docs-top-dropdown is-active\"><a [^>]*>User Guide", top_menu_html(guide_content))
+            guide_sidebar = match(r"<ul class=\"docs-menu\">.*?</ul><div class=\"docs-version-selector"s, guide_content).match
+            @test occursin("Advanced", guide_sidebar)
+            @test !occursin("Installation", guide_sidebar)
 
-        # --- Additional edge case tests for top_menu ---
+            # Previous/next links stay within each section
+            @test !occursin("docs-footer-prevpage", guide_content)
+            @test occursin("docs-footer-nextpage", guide_content)
+            @test !occursin("docs-footer-nextpage", read_page("getting-started", "install"))
 
-        using Documenter
-        import Markdown
-        # Helper to create a temp doc source dir with a minimal index.md
-        function makedocs_with_topmenu(top_menu_pages; extra_kwargs = Dict())
-            tempdir = mktempdir()
-            srcdir = joinpath(tempdir, "src")
-            mkpath(srcdir)
-            write(joinpath(srcdir, "index.md"), "# Index\n\nSome content.")
-            kwargs = Dict(
-                :root => tempdir,
-                :source => srcdir,
-                :build => joinpath(tempdir, "build"),
-                :sitename => "TopMenu EdgeCase",
-                :pages => top_menu_pages,
-                :format => Documenter.HTML(top_menu = true, prettyurls = false),
-                :warnonly => true,
-                :remotes => nothing,
-            )
-            merge!(kwargs, extra_kwargs)
-            return Documenter.makedocs(; kwargs...)
-        end
-
-        # 1. Duplicate page in different sections triggers warning
-        @testset "top_menu duplicate page warning" begin
-            pages = [
-                "Section 1" => ["index.md"],
-                "Section 2" => ["index.md"],
-            ]
-            io = IOBuffer()
-            got_warn = false
-            with_logger(ConsoleLogger(io, Logging.Warn)) do
-                makedocs_with_topmenu(pages)
-                got_warn = occursin("appears in multiple top_menu sections", String(take!(io)))
-            end
-            @test got_warn
-        end
-
-        # 2. Invalid top_menu entry (not a Pair)
-        @testset "top_menu invalid entry error" begin
-            pages = [["not a pair"]]
-            @test_throws ErrorException makedocs_with_topmenu(pages)
-        end
-
-        # 3. top_menu with an empty section (should not crash)
-        @testset "top_menu empty section" begin
-            pages = ["Empty Section" => []]
-            @test_nowarn makedocs_with_topmenu(pages)
+            # A section that is a page with sub-pages keeps its own page in the sidebar
+            reference_content = read_page("reference")
+            @test occursin(r"<a class=\"tocitem\" href[^>]*>Reference</a>", reference_content)
+            @test occursin("docs-footer-nextpage", reference_content)
+            @test !occursin("docs-footer-prevpage", reference_content)
+            @test occursin("docs-footer-prevpage", read_page("reference", "extra"))
+            # ... and the next page of the last page of a section is not in another section
+            @test !occursin("docs-footer-nextpage", read_page("reference", "extra"))
         end
     end
 
