@@ -569,8 +569,8 @@ their absolute URLs, can be included with the [`asset`](@ref) function.
 
 **`top_menu`** (Boolean, default: `false`) enables building a top-level navigation bar
 above the sidebar navigation. When set to `true`, the first layer of the `pages` argument
-to [`makedocs`](@ref) is used as the top menu (each entry becomes a section with its own
-sidebar navigation).
+to [`makedocs`](@ref `Documenter.makedocs`) is used as the top menu (each entry becomes a
+section with its own sidebar navigation).
 
 ```julia
 makedocs(
