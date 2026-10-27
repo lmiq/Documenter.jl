@@ -189,14 +189,16 @@ $documenter-topmenu-active-color: $documenter-sidebar-menu-active-color !default
       padding: 0 1rem;
       font-size: 0.875rem;
       height: 2.5rem;
+
+      // Nested under .docs-top-menu-link to match the specificity of the base rule
+      .docs-top-dropdown-caret {
+        display: none;
+      }
     }
 
     // Hide dropdowns on touch devices — they don't work with hover-only interaction
     .docs-top-dropdown-menu {
       display: none !important;
-    }
-    .docs-top-dropdown-caret {
-      display: none;
     }
   }
 
