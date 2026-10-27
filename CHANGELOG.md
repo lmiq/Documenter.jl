@@ -7,16 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Support self-hosted GitHub instances. ([#2755])
+* Added a `top_menu` option to `Documenter.HTML` for multi-section documentation with a top navigation bar. With `HTML(top_menu = true)`, each top-level entry of `pages` becomes a section in the top bar, with its own sidebar navigation tree and previous/next page links. ([#2904])
+* The HTML output now sets a `no-referrer` referrer policy by default, so that the CDNs serving the fonts, stylesheets and scripts are no longer told which page the reader is on. It can be changed or disabled with the `referrerpolicy` keyword of `Documenter.HTML`. ([#2391], [#2401])
+
+### Fixed
+
+* An `@contents` or `@index` block whose body fails to parse is now left unexpanded instead of falling back to the defaults, which silently listed the whole document. ([#1140])
+* `@contents` blocks without an explicit `Pages = [...]` now list the pages in the order given by the `pages` argument of `makedocs`, instead of alphabetically by source path. ([#936])
+* A fenced code block whose language merely starts with the name of a Documenter block, such as ```` ```jldoctests ```` or ```` ```@examples ````, no longer aborts the build with an `internal error`. Documenter now dispatches on the whole language, so such a block is again passed through as an ordinary code block — and reported with a warning, since it is usually a typo. ([#2997], [#2912])
+
+## Version [v1.19.0] - 2026-09-01
+
+### Added
+
+* `doctest` now accepts a `meta` keyword, like `makedocs` does, so that a global `DocTestSetup` can be set for the doctests on manual pages when they are run through `doctest`. ([#2512], [#2697])
+
+### Fixed
+
+* Large code blocks, such as `@raw html` blocks embedding a plot, no longer abort the build with `PCRE compilation error: regular expression is too large`. Locating a code block in its source file now matches line by line instead of compiling the entire block into a regular expression, which also stops line numbers in error messages from pointing at an unrelated earlier line containing the same text. ([#2992], [#2912])
+* Default values supplied through the `meta` keyword of `makedocs` now also reach pages that carry no `@meta` block of their own. They used to be discarded before cross-referencing, so on such a page `@ref` lost `CurrentModule`, and `CollapsedDocStrings`, `Description`, `EditURL` and `IgnorePage` never reached the writer. ([#2512], [#2697], [#2987])
+* The search index now records what an at-block actually renders, instead of its source: `@meta` and `@setup` blocks contribute nothing, `@example` and `@repl` blocks contribute their code *and* their output, and `@eval` blocks contribute only their result. Searching no longer turns up text such as `DocTestSetup` that appears nowhere on the page. ([#1929], [#2672])
+
+## Version [v1.18.0] - 2026-08-28
+
+### Added
+
+* The `[content](@id name)` syntax can now attach a named, cross-referenceable anchor to arbitrary inline content (such as text or a thumbnail image), not just headers. These anchors resolve via `@ref`, share a single id namespace with header labels, and are written to the `objects.inv` inventory as `std:label` entries. ([#745])
+* Large Markdown tables in LaTeX / PDF output now use `xltabular`, so they break across pages with a repeated header row instead of being silently dropped or aborting the build with `Dimension too large`. ([#2963])
 
 ### Changed
 
 * Change type of `HTML.assets` field to `Vector{HTMLHeadContent}` to allow configuring dynamically in plugins. ([#2925])
+* JuliaMono has been updated from `v0.050` to `v0.63.2`. ([#2953])
+* Minisearchjs has been updated from `v6.1.0` to `v6.2.0` and is served via `cdnjs` instead of `jsdelivr`. ([#2973], [#2212], [#2976])
+* The SSH deploy key instructions in the manual now cover GitHub Actions directly, naming the settings pages for both halves of the key pair and disambiguating repository secrets from variables and environment secrets. ([#2403])
 
 ### Fixed
 
+* Fixed an `Unexpected repository roots` error when `makedocs` runs in a Git repository nested inside a directory configured in `remotes`; the repository's own remote is now used for the main repository, and the `remotes` entry applies to the surrounding paths. ([#2868])
 * Fixed headers hidden by the navbar. ([#2905])
-* Tightened `@ref` classification so references are matched more consistently by syntax, with header labels still taking precedence over docstrings and mistaken header/id references less likely to resolve as docstrings. ([#2678])
+* Tightened `@ref` classification so references are matched more consistently by syntax. Plain link text is now a header reference only; a docstring must be written as ```[`makedocs`](@ref)``` rather than `[makedocs](@ref)`. Backticked text still falls back to a header, since a header title may itself be code. ([#2678], [#2961])
+* Reverted the eager failure on a non-unique header slug added in [#2787], which also rejected references that resolve correctly ([#2843]) and prevented plugin resolvers from running; see [#2960] for details. ([#2668], [#2787], [#2843], [#2960], [#2961])
+* Footnote previews are no longer clipped by a surrounding table or code block, are kept within the viewport, and stay open while the pointer is over them, so that long previews can be scrolled. ([#2894], [#2956])
+* LaTeX: a footnote containing a code block no longer breaks the PDF build. ([#2958])
 
 ## Version [v1.17.0] - 2026-02-20
 
@@ -1652,6 +1685,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [v1.16.0]: https://github.com/JuliaDocs/Documenter.jl/releases/tag/v1.16.0
 [v1.16.1]: https://github.com/JuliaDocs/Documenter.jl/releases/tag/v1.16.1
 [v1.17.0]: https://github.com/JuliaDocs/Documenter.jl/releases/tag/v1.17.0
+[v1.18.0]: https://github.com/JuliaDocs/Documenter.jl/releases/tag/v1.18.0
+[v1.19.0]: https://github.com/JuliaDocs/Documenter.jl/releases/tag/v1.19.0
 [#198]: https://github.com/JuliaDocs/Documenter.jl/issues/198
 [#245]: https://github.com/JuliaDocs/Documenter.jl/issues/245
 [#487]: https://github.com/JuliaDocs/Documenter.jl/issues/487
@@ -1664,6 +1699,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#697]: https://github.com/JuliaDocs/Documenter.jl/issues/697
 [#706]: https://github.com/JuliaDocs/Documenter.jl/issues/706
 [#744]: https://github.com/JuliaDocs/Documenter.jl/issues/744
+[#745]: https://github.com/JuliaDocs/Documenter.jl/issues/745
 [#756]: https://github.com/JuliaDocs/Documenter.jl/issues/756
 [#764]: https://github.com/JuliaDocs/Documenter.jl/issues/764
 [#774]: https://github.com/JuliaDocs/Documenter.jl/issues/774
@@ -1704,6 +1740,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#929]: https://github.com/JuliaDocs/Documenter.jl/issues/929
 [#934]: https://github.com/JuliaDocs/Documenter.jl/issues/934
 [#935]: https://github.com/JuliaDocs/Documenter.jl/issues/935
+[#936]: https://github.com/JuliaDocs/Documenter.jl/issues/936
 [#937]: https://github.com/JuliaDocs/Documenter.jl/issues/937
 [#938]: https://github.com/JuliaDocs/Documenter.jl/issues/938
 [#941]: https://github.com/JuliaDocs/Documenter.jl/issues/941
@@ -1771,6 +1808,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#1119]: https://github.com/JuliaDocs/Documenter.jl/issues/1119
 [#1121]: https://github.com/JuliaDocs/Documenter.jl/issues/1121
 [#1137]: https://github.com/JuliaDocs/Documenter.jl/issues/1137
+[#1140]: https://github.com/JuliaDocs/Documenter.jl/issues/1140
 [#1144]: https://github.com/JuliaDocs/Documenter.jl/issues/1144
 [#1147]: https://github.com/JuliaDocs/Documenter.jl/issues/1147
 [#1148]: https://github.com/JuliaDocs/Documenter.jl/issues/1148
@@ -2095,6 +2133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#2206]: https://github.com/JuliaDocs/Documenter.jl/issues/2206
 [#2210]: https://github.com/JuliaDocs/Documenter.jl/issues/2210
 [#2211]: https://github.com/JuliaDocs/Documenter.jl/issues/2211
+[#2212]: https://github.com/JuliaDocs/Documenter.jl/issues/2212
 [#2213]: https://github.com/JuliaDocs/Documenter.jl/issues/2213
 [#2214]: https://github.com/JuliaDocs/Documenter.jl/issues/2214
 [#2215]: https://github.com/JuliaDocs/Documenter.jl/issues/2215
@@ -2148,8 +2187,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#2375]: https://github.com/JuliaDocs/Documenter.jl/issues/2375
 [#2378]: https://github.com/JuliaDocs/Documenter.jl/issues/2378
 [#2382]: https://github.com/JuliaDocs/Documenter.jl/issues/2382
+[#2391]: https://github.com/JuliaDocs/Documenter.jl/issues/2391
 [#2394]: https://github.com/JuliaDocs/Documenter.jl/issues/2394
 [#2399]: https://github.com/JuliaDocs/Documenter.jl/issues/2399
+[#2401]: https://github.com/JuliaDocs/Documenter.jl/issues/2401
+[#2403]: https://github.com/JuliaDocs/Documenter.jl/issues/2403
 [#2406]: https://github.com/JuliaDocs/Documenter.jl/issues/2406
 [#2408]: https://github.com/JuliaDocs/Documenter.jl/issues/2408
 [#2410]: https://github.com/JuliaDocs/Documenter.jl/issues/2410
@@ -2217,9 +2259,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#2659]: https://github.com/JuliaDocs/Documenter.jl/issues/2659
 [#2662]: https://github.com/JuliaDocs/Documenter.jl/issues/2662
 [#2668]: https://github.com/JuliaDocs/Documenter.jl/issues/2668
+[#2672]: https://github.com/JuliaDocs/Documenter.jl/issues/2672
 [#2674]: https://github.com/JuliaDocs/Documenter.jl/issues/2674
 [#2675]: https://github.com/JuliaDocs/Documenter.jl/issues/2675
 [#2676]: https://github.com/JuliaDocs/Documenter.jl/issues/2676
+[#2678]: https://github.com/JuliaDocs/Documenter.jl/issues/2678
 [#2679]: https://github.com/JuliaDocs/Documenter.jl/issues/2679
 [#2682]: https://github.com/JuliaDocs/Documenter.jl/issues/2682
 [#2683]: https://github.com/JuliaDocs/Documenter.jl/issues/2683
@@ -2246,7 +2290,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#2751]: https://github.com/JuliaDocs/Documenter.jl/issues/2751
 [#2752]: https://github.com/JuliaDocs/Documenter.jl/issues/2752
 [#2753]: https://github.com/JuliaDocs/Documenter.jl/issues/2753
-[#2755]: https://github.com/JuliaDocs/Documenter.jl/issues/2755
 [#2761]: https://github.com/JuliaDocs/Documenter.jl/issues/2761
 [#2762]: https://github.com/JuliaDocs/Documenter.jl/issues/2762
 [#2772]: https://github.com/JuliaDocs/Documenter.jl/issues/2772
@@ -2269,16 +2312,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#2836]: https://github.com/JuliaDocs/Documenter.jl/issues/2836
 [#2839]: https://github.com/JuliaDocs/Documenter.jl/issues/2839
 [#2842]: https://github.com/JuliaDocs/Documenter.jl/issues/2842
+[#2843]: https://github.com/JuliaDocs/Documenter.jl/issues/2843
 [#2844]: https://github.com/JuliaDocs/Documenter.jl/issues/2844
 [#2849]: https://github.com/JuliaDocs/Documenter.jl/issues/2849
 [#2854]: https://github.com/JuliaDocs/Documenter.jl/issues/2854
 [#2857]: https://github.com/JuliaDocs/Documenter.jl/issues/2857
+[#2868]: https://github.com/JuliaDocs/Documenter.jl/issues/2868
 [#2871]: https://github.com/JuliaDocs/Documenter.jl/issues/2871
 [#2874]: https://github.com/JuliaDocs/Documenter.jl/issues/2874
 [#2875]: https://github.com/JuliaDocs/Documenter.jl/issues/2875
 [#2880]: https://github.com/JuliaDocs/Documenter.jl/issues/2880
 [#2889]: https://github.com/JuliaDocs/Documenter.jl/issues/2889
+[#2894]: https://github.com/JuliaDocs/Documenter.jl/issues/2894
+[#2904]: https://github.com/JuliaDocs/Documenter.jl/issues/2904
 [#2905]: https://github.com/JuliaDocs/Documenter.jl/issues/2905
+[#2912]: https://github.com/JuliaDocs/Documenter.jl/issues/2912
+[#2925]: https://github.com/JuliaDocs/Documenter.jl/issues/2925
+[#2953]: https://github.com/JuliaDocs/Documenter.jl/issues/2953
+[#2956]: https://github.com/JuliaDocs/Documenter.jl/issues/2956
+[#2958]: https://github.com/JuliaDocs/Documenter.jl/issues/2958
+[#2960]: https://github.com/JuliaDocs/Documenter.jl/issues/2960
+[#2961]: https://github.com/JuliaDocs/Documenter.jl/issues/2961
+[#2963]: https://github.com/JuliaDocs/Documenter.jl/issues/2963
+[#2973]: https://github.com/JuliaDocs/Documenter.jl/issues/2973
+[#2976]: https://github.com/JuliaDocs/Documenter.jl/issues/2976
+[#2987]: https://github.com/JuliaDocs/Documenter.jl/issues/2987
+[#2992]: https://github.com/JuliaDocs/Documenter.jl/issues/2992
+[#2997]: https://github.com/JuliaDocs/Documenter.jl/issues/2997
 [JuliaLang/julia#36953]: https://github.com/JuliaLang/julia/issues/36953
 [JuliaLang/julia#38054]: https://github.com/JuliaLang/julia/issues/38054
 [JuliaLang/julia#39841]: https://github.com/JuliaLang/julia/issues/39841
