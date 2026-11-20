@@ -40,7 +40,13 @@ end
 
 function missingbindings(doc::Document)
     @debug "checking for missing docstrings."
-    bindings = allbindings(doc.user.checkdocs, doc.blueprint.modules)
+    # The ignored modules can still be in the blueprint when they were passed to `modules`
+    # directly, since their docstrings may still be spliced into the manual.
+    ignored = submodules(doc.user.checkdocs_ignored_modules)
+    bindings = allbindings(doc.user.checkdocs, setdiff(doc.blueprint.modules, ignored))
+    # A binding with a single docstring is covered by any reference to it. Decide this from
+    # the original count, since the sets shrink as we go and the iteration order is not fixed.
+    single = Set(b for (b, s) in bindings if length(s) == 1)
     for object in keys(doc.internal.objects)
         if !is_canonical(object)
             continue
@@ -59,7 +65,7 @@ function missingbindings(doc::Document)
         end
         if haskey(bindings, binding)
             signatures = bindings[binding]
-            if object.signature ≡ Union{} || length(signatures) ≡ 1
+            if object.signature ≡ Union{} || binding in single
                 delete!(bindings, binding)
             elseif object.signature in signatures
                 delete!(signatures, object.signature)
@@ -307,7 +313,7 @@ function _linkcheck_curl(method::Symbol, url::AbstractString; timeout::Real, use
     # case of docs.github.com, the server returns a 403 with a page saying "The request
     # is blocked". However, spoofing a realistic browser User-Agent string is enough to
     # get around this, and so here we simply pass the example Chrome UA string from the
-    # Mozilla developer docs, but only is it's a HTTP(S) request.
+    # Mozilla developer docs, but only if it's an HTTP(S) request.
     #
     # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/User-Agent#chrome_ua_string
     if startswith(uppercase(url), "HTTP")

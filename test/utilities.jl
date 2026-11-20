@@ -454,7 +454,7 @@ end
         ]
         @test mdparse("", mode = :blocks) == []
 
-        # Note: Markdown.parse() does not put any child nodes into adminition.contents
+        # Note: Markdown.parse() does not put any child nodes into admonition.contents
         # unless there is something non-empty there, which in turn means that the
         # MarkdownAST Admonition node has no children.
         @test mdparse("!!! adm"; mode = :single) == [
@@ -605,6 +605,58 @@ end
         end
     end
 
+    @testset "find_block_in_file" begin
+        # The Markdown parser hands over the block body without the surrounding
+        # fences and with the indentation of nested blocks stripped.
+        markdown = """
+        # Title
+
+        ```julia
+        f(x) = 2x
+        ```
+
+        - a list item
+
+          ```@example
+          g(y) = y
+          h(z) = z
+          ```
+
+        > ```@repl
+        > k = 1
+        > ```
+
+        !!! note
+            ```@raw html
+            <p>hi</p>
+            ```
+        """
+        mktempdir() do dir
+            file = joinpath(dir, "index.md")
+            write(file, markdown)
+
+            # the returned range covers the fences, not the body
+            @test Documenter.find_block_in_file("f(x) = 2x", file) == (3 => 5)
+            @test Documenter.find_block_in_file("g(y) = y\nh(z) = z", file) == (9 => 12)
+            @test Documenter.find_block_in_file("k = 1", file) == (14 => 16)
+            @test Documenter.find_block_in_file("<p>hi</p>", file) == (19 => 21)
+
+            @test Documenter.find_block_in_file("not in the file", file) === nothing
+            @test Documenter.find_block_in_file("", file) === nothing
+            @test Documenter.find_block_in_file("f(x) = 2x", joinpath(dir, "nope.md")) === nothing
+
+            crlf = joinpath(dir, "crlf.md")
+            write(crlf, replace(markdown, "\n" => "\r\n"))
+            @test Documenter.find_block_in_file("f(x) = 2x", crlf) == (3 => 5)
+
+            # a block far too large to compile into a regex (issue #2992)
+            huge = join(("<div>line $(i)</div>" for i in 1:5000), "\n")
+            hugefile = joinpath(dir, "huge.md")
+            write(hugefile, "# Title\n\n```@raw html\n$(huge)\n```\n")
+            @test Documenter.find_block_in_file(huge, hugefile) == (3 => 5004)
+        end
+    end
+
     @testset "codelang" begin
         @test Documenter.codelang("") == ""
         @test Documenter.codelang(" ") == ""
@@ -618,6 +670,23 @@ end
         @test Documenter.codelang("\t julia   \tx=y ") == "julia"
         @test Documenter.codelang("\t julia   \tx=y ") == "julia"
         @test Documenter.codelang("&%^ ***") == "&%^"
+    end
+
+    @testset "blocklang" begin
+        @test Documenter.blocklang("") == ""
+        @test Documenter.blocklang("jldoctest") == "jldoctest"
+        @test Documenter.blocklang("jldoctests") == "jldoctests"
+        @test Documenter.blocklang("jldoctest; setup = :(x = 1)") == "jldoctest"
+        @test Documenter.blocklang("@example name; k = v") == "@example"
+        @test Documenter.blocklang("@docs; canonical=false") == "@docs"
+        @test Documenter.blocklang("@raw\thtml") == "@raw"
+
+        @test Documenter.iscodelang(MarkdownAST.CodeBlock("jldoctest", ""), "jldoctest")
+        @test Documenter.iscodelang(MarkdownAST.CodeBlock("jldoctest name", ""), "jldoctest")
+        @test Documenter.iscodelang(MarkdownAST.CodeBlock("jldoctest;a=1", ""), "jldoctest")
+        @test !Documenter.iscodelang(MarkdownAST.CodeBlock("jldoctests", ""), "jldoctest")
+        @test !Documenter.iscodelang(MarkdownAST.CodeBlock("jldoctest_special", ""), "jldoctest")
+        @test !Documenter.iscodelang(MarkdownAST.CodeBlock("@examples", ""), "@example")
     end
 
     @testset "parse fenced code block language" begin
@@ -810,6 +879,36 @@ end
         @test remove_common_backtrace([1, 2, 3], [0, 1, 2, 3]) == []
     end
 
+    @testset "softscope" begin
+        function toplevel_frame(ex)
+            try
+                Core.eval(Module(), ex)
+            catch
+                st = stacktrace(catch_backtrace())
+                return st[findfirst(f -> f.func === Symbol("top-level scope"), st)]
+            end
+        end
+        # The stack frame of an expression without line number information must still
+        # point to none:1, which Julia 1.14's REPL.softscope would turn into `:?`.
+        frame = toplevel_frame(Documenter.softscope(Meta.parse("error(\"x\")")))
+        @test frame.file === :none
+        @test frame.line == 1
+        # Existing line number information is left alone
+        ex = Expr(:toplevel, LineNumberNode(3, "REPL"), Meta.parse("error(\"x\")"))
+        frame = toplevel_frame(Documenter.softscope(ex))
+        @test frame.file === :REPL
+        @test frame.line == 3
+        # Only expressions get wrapped, as that would add a stack frame
+        @test Documenter.softscope(:x) === :x
+        @test Documenter.softscope(1) === 1
+        @test Documenter.softscope(Expr(:toplevel, LineNumberNode(1, :none), :x)) == Expr(:toplevel, LineNumberNode(1, :none), :x)
+        # .. and the expression does get the REPL's soft scope
+        m = Module()
+        Core.eval(m, :(s = 0))
+        Core.eval(m, Documenter.softscope(Meta.parse("for i in 1:3\n    s += i\nend")))
+        @test Core.eval(m, :s) == 6
+    end
+
     @testset "slugify" begin
         for (test, answer) in [
                 # Nonstrings get converted to strings
@@ -839,19 +938,6 @@ end
             ]
             @test Documenter.slugify(test) == answer
         end
-    end
-
-    @testset "GitHub constructors" begin
-        gh = Documenter.Remotes.GitHub("user/project")
-        @test gh.user == "user"
-        @test gh.repo == "project"
-        @test gh.host == "github.com"
-
-
-        gh = Documenter.Remotes.GitHub("selfhosted.com/user/project")
-        @test gh.user == "user"
-        @test gh.repo == "project"
-        @test gh.host == "selfhosted.com"
     end
 end
 

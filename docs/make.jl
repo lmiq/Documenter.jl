@@ -3,7 +3,7 @@ include("DocumenterShowcase.jl")
 
 # The DOCSARGS environment variable can be used to pass additional arguments to make.jl.
 # This is useful on CI, if you need to change the behavior of the build slightly but you
-# can not change the .travis.yml or make.jl scripts any more (e.g. for a tag build).
+# cannot change the .travis.yml or make.jl scripts any more (e.g. for a tag build).
 if haskey(ENV, "DOCSARGS")
     for arg in split(ENV["DOCSARGS"])
         (arg in ARGS) || push!(ARGS, arg)
@@ -32,8 +32,12 @@ linkcheck_ignore = [
 if get(ENV, "GITHUB_ACTIONS", nothing) == "true"
     # It seems that CTAN blocks GitHub Actions?
     push!(linkcheck_ignore, "https://ctan.org/pkg/minted")
+    # Putty homepage times out from Actions runners (curl exit 28).
+    push!(linkcheck_ignore, "https://www.chiark.greenend.org.uk/~sgtatham/putty/")
     # Codeberg answers 403 to Actions runners.
     push!(linkcheck_ignore, r"^https://codeberg.org")
+    # So does the W3C site.
+    push!(linkcheck_ignore, r"^https://www.w3.org")
 end
 
 makedocs(
@@ -109,10 +113,12 @@ if "pdf" in ARGS
         branch = "gh-pages-pdf",
         forcepush = true,
     )
-else
+elseif "linkcheck" ∉ ARGS
+    # The linkcheck job only checks links: the docs job deploys the same build, and the
+    # linkcheck job's token is not allowed to push.
     deploydocs(
         repo = "github.com/JuliaDocs/Documenter.jl.git",
         target = "build",
-        push_preview = "linkcheck" ∉ ARGS,
+        push_preview = true,
     )
 end

@@ -310,6 +310,24 @@ end
         @test html.size_threshold_warn == 1234
     end
 
+    @testset "HTML: referrerpolicy" begin
+        @test Documenter.HTML().referrerpolicy == "no-referrer"
+        @test Documenter.HTML(referrerpolicy = "strict-origin").referrerpolicy == "strict-origin"
+        @test Documenter.HTML(referrerpolicy = nothing).referrerpolicy === nothing
+
+        # An invalid token would be silently ignored by the browser.
+        @test_throws ArgumentError Documenter.HTML(referrerpolicy = "strict_origin")
+        @test_throws ArgumentError Documenter.HTML(referrerpolicy = "")
+        for policy in HTMLWriter.REFERRER_POLICIES
+            @test Documenter.HTML(referrerpolicy = policy).referrerpolicy == policy
+        end
+
+        tag = HTMLWriter.referrerpolicy_meta_tag("no-referrer")
+        @test string(tag) == """<meta name="referrer" content="no-referrer"/>"""
+        # No tag at all means the browser default applies.
+        @test string(HTMLWriter.referrerpolicy_meta_tag(nothing)) == ""
+    end
+
     @testset "HTML: format_units" begin
         @test HTMLWriter.format_units(0) == "0.0 (bytes)"
         @test HTMLWriter.format_units(1) == "1.0 (bytes)"
@@ -318,6 +336,16 @@ end
         @test HTMLWriter.format_units(4000) == "3.91 (KiB)"
         @test HTMLWriter.format_units(2^20 + 123) == "1.0 (MiB)"
         @test HTMLWriter.format_units(typemax(Int)) == "(no limit)"
+    end
+
+    @testset "HTML: image_size_attributes" begin
+        images = joinpath(@__DIR__, "examples", "images")
+        # the -hidpi files declare twice the CSS reference of 96 dpi, the others declare no resolution
+        @test HTMLWriter.image_size_attributes(read(joinpath(images, "tiny.png"))) == (:width => "128", :height => "68")
+        @test HTMLWriter.image_size_attributes(read(joinpath(images, "tiny-hidpi.png"))) == (:width => "64", :height => "34")
+        @test HTMLWriter.image_size_attributes(read(joinpath(images, "tiny.jpeg"))) == (:width => "128", :height => "68")
+        @test HTMLWriter.image_size_attributes(read(joinpath(images, "tiny-hidpi.jpeg"))) == (:width => "64", :height => "34")
+        @test HTMLWriter.image_size_attributes(collect(b"not an image")) == ()
     end
 
     @testset "HTML: _strip_latex_math_delimiters" begin
